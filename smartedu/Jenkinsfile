@@ -1,0 +1,78 @@
+pipeline {
+    agent any
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('Docker-cred')
+    }
+
+    stages {
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Clean Environment') {
+            steps {
+                sh '''
+                docker system prune -fa || true
+                '''
+            }
+        } 
+        
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/s5wesley/smartedu.git'
+            }
+        }
+        stage('Login to DockerHub') {
+            steps {
+                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+            }
+        }
+        stage('File System Scan') {
+            steps {
+                sh "trivy fs --format table -o trivy-fs-report.html ."
+            }
+        }
+         stage('Build Docker Image') {
+            steps {
+                sh '''
+                docker build -t bulawesley/smartedu:v$BUILD_NUMBER .
+                '''
+            }
+        }
+        stage('Docker Image Scan') {
+            steps {
+                sh "trivy image --format table -o trivy-image-report.html bulawesley/smartedu:v$BUILD_NUMBER"
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                sh 'docker push bulawesley/smartedu:v$BUILD_NUMBER'
+            }
+        }
+        stage('Deploy Application') {
+            steps {
+                script {
+                    // Stop any running container with the same name
+                    sh 'docker stop smartedu-app || true'
+                    sh 'docker rm smartedu-app || true'
+
+                    // Run the new container with the application
+                    sh '''
+                        docker run -d \
+                        --name smartedu-app \
+                        -p 4566:80 \
+                        bulawesley/smartedu:v$BUILD_NUMBER
+                    '''
+                }
+            }
+        }
+        stage('Display Server IP') {
+            steps {
+                sh 'curl ifconfig.io'
+            }
+        }
+
+    } 
+}       
