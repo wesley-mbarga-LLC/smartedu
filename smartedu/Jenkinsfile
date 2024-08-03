@@ -37,7 +37,7 @@ pipeline {
          stage('Build Docker Image') {
             steps {
                 sh '''
-                docker build -t bulawesley/smartedu:v$BUILD_NUMBER -f smartedu/Dockerfile
+                docker build -t bulawesley/smartedu:v$BUILD_NUMBER -f smartedu/Dockerfile smartedu/
                 '''
             }
         }
