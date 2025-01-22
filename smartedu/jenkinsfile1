@@ -1,0 +1,92 @@
+pipeline {
+    agent any
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('Docker-cred')
+        ARGOCD_SERVER = https://206.189.233.232:30081 // Replace with your ArgoCD server URL
+        ARGOCD_USERNAME = 'admin'
+        ARGOCD_PASSWORD = 'Dicaprio78'
+    }
+
+    stages {
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Clean Environment') {
+            steps {
+                sh '''
+                docker system prune -fa || true
+                '''
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/s5wesley/smartedu.git'
+            }
+        }
+
+        stage('Login to DockerHub') {
+            steps {
+                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+            }
+        }
+
+        stage('File System Scan') {
+            steps {
+                sh "trivy fs --format table -o trivy-fs-report.html ."
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                docker build -t bulawesley/smartedu:v$BUILD_NUMBER -f smartedu/Dockerfile smartedu/
+                '''
+            }
+        }
+
+        stage('Docker Image Scan') {
+            steps {
+                sh "trivy image --format table -o trivy-image-report.html bulawesley/smartedu:v$BUILD_NUMBER"
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                sh 'docker push bulawesley/smartedu:v$BUILD_NUMBER'
+            }
+        }
+
+        stage('Deploy Application') {
+            steps {
+                script {
+                    // Login to ArgoCD
+                    sh '''
+                    argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+                    '''
+
+                    // Update the image in the deployment
+                    sh '''
+                    argocd app set smartedu-app \
+                        --parameter image.tag=v$BUILD_NUMBER \
+                        --parameter image.repository=bulawesley/smartedu
+                    '''
+
+                    // Sync the application
+                    sh '''
+                    argocd app sync smartedu-app
+                    '''
+                }
+            }
+        }
+
+        stage('Display Server IP') {
+            steps {
+                sh 'curl ifconfig.io'
+            }
+        }
+    }
+}
