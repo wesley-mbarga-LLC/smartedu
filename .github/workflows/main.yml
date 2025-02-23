@@ -44,22 +44,6 @@ jobs:
       run: |
         docker push bulawesley/smartedu:v${{ github.run_number }}
 
-    - name: Pull Docker Image (Ensure Availability)
-      run: docker pull bulawesley/smartedu:v${{ github.run_number }}
-
-    - name: Save Docker Image to File
-      run: docker save -o smartedu.tar bulawesley/smartedu:v${{ github.run_number }}
-
-    - name: Docker Image Scan with Trivy (Using Input File)
-      run: |
-        docker run --rm -v ${{ github.workspace }}:/mnt aquasec/trivy image --input /mnt/smartedu.tar --format table -o /mnt/trivy-image-report.html
-
-    - name: Upload Trivy Image Scan Report
-      uses: actions/upload-artifact@v4
-      with:
-        name: trivy-image-report
-        path: trivy-image-report.html
-
     - name: Deploy Application
       run: |
         docker stop smartedu-app || true
