@@ -34,11 +34,17 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
+    - name: Verify Build Context
+      run: ls -l smartedu/
+
     - name: Build Docker image
       run: |
-        docker buildx build --cache-from=type=registry,ref=bulawesley/smartedu:cache \
+        docker buildx build --load --cache-from=type=registry,ref=bulawesley/smartedu:cache \
           --cache-to=type=inline \
           -t bulawesley/smartedu:v${{ github.run_number }} -f smartedu/Dockerfile smartedu/
+
+    - name: List Docker Images (Debug)
+      run: docker images
 
     - name: Push Docker image
       run: |
