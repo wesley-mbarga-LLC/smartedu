@@ -14,10 +14,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
+      uses: docker/setup-buildx-action@v2
 
     - name: Clean Docker system
       run: |
@@ -34,7 +34,7 @@ jobs:
         docker run --rm -v ${{ github.workspace }}:/mnt aquasec/trivy fs --format table -o /mnt/trivy-fs-report.html /mnt
 
     - name: Upload Trivy FS Scan Report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: trivy-fs-report
         path: trivy-fs-report.html
@@ -50,7 +50,7 @@ jobs:
         docker run --rm aquasec/trivy image --format table -o trivy-image-report.html bulawesley/smartedu:v${{ github.run_number }}
 
     - name: Upload Trivy Image Scan Report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: trivy-image-report
         path: trivy-image-report.html
@@ -68,3 +68,4 @@ jobs:
 
     - name: Display Server IP
       run: curl ifconfig.io
+
