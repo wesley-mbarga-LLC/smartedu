@@ -1,0 +1,70 @@
+name: CI Workflow
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Clean Docker system
+      run: |
+        docker system prune -a -f --volumes || true
+
+    - name: Log in to DockerHub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+    - name: File System Scan with Trivy
+      run: |
+        docker run --rm -v ${{ github.workspace }}:/mnt aquasec/trivy fs --format table -o /mnt/trivy-fs-report.html /mnt
+
+    - name: Upload Trivy FS Scan Report
+      uses: actions/upload-artifact@v3
+      with:
+        name: trivy-fs-report
+        path: trivy-fs-report.html
+
+    - name: Build Docker image
+      run: |
+        docker buildx build --cache-from=type=registry,ref=bulawesley/smartedu:cache \
+          --cache-to=type=inline \
+          -t bulawesley/smartedu:v${{ github.run_number }} -f smartedu/Dockerfile smartedu/
+
+    - name: Docker Image Scan with Trivy
+      run: |
+        docker run --rm aquasec/trivy image --format table -o trivy-image-report.html bulawesley/smartedu:v${{ github.run_number }}
+
+    - name: Upload Trivy Image Scan Report
+      uses: actions/upload-artifact@v3
+      with:
+        name: trivy-image-report
+        path: trivy-image-report.html
+
+    - name: Push Docker image
+      run: |
+        docker push bulawesley/smartedu:v${{ github.run_number }}
+
+    - name: Deploy Application
+      run: |
+        docker stop smartedu-app || true
+        docker rm smartedu-app || true
+        docker pull bulawesley/smartedu:v${{ github.run_number }}
+        docker run -d --name smartedu-app -p 4566:80 bulawesley/smartedu:v${{ github.run_number }}
+
+    - name: Display Server IP
+      run: curl ifconfig.io
