@@ -34,17 +34,11 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-    - name: Verify Build Context
-      run: ls -l smartedu/
-
     - name: Build Docker image
       run: |
         docker buildx build --load --cache-from=type=registry,ref=bulawesley/smartedu:cache \
           --cache-to=type=inline \
           -t bulawesley/smartedu:v${{ github.run_number }} -f smartedu/Dockerfile smartedu/
-
-    - name: List Docker Images (Debug)
-      run: docker images
 
     - name: Push Docker image
       run: |
@@ -57,20 +51,17 @@ jobs:
         docker pull bulawesley/smartedu:v${{ github.run_number }}
         docker run -d --name smartedu-app -p 4566:80 bulawesley/smartedu:v${{ github.run_number }}
 
-    - name: Install and Start Ngrok
+    - name: Start Ngrok and Keep Running
       run: |
         curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
         echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
         sudo apt update && sudo apt install ngrok -y
         ngrok authtoken ${{ secrets.NGROK_TOKEN }}
-        ngrok http 4566 --log=stdout > ngrok.log 2>&1 &
+        ngrok http 4566 --log=stdout &
+        sleep 360  # Keep the session alive for 6 minutes
 
-    - name: Wait for Ngrok to Start (6 minutes)
-      run: sleep 360
-
-    - name: Debug Ngrok Log
-      run: cat ngrok.log
+    - name: Keep Ngrok Active
+      run: while true; do curl -Is http://127.0.0.1:4040/api/tunnels || break; sleep 30; done &
 
     - name: Display Ngrok URL
-      run: |
-        curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'
+      run: curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'
