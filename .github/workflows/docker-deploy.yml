@@ -82,7 +82,7 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
 
       - name: Open firewall ports 80, 5000, 5001 (create or update)
-        continue-on-error: true   # don't fail entire job if IAM is not ready
+        continue-on-error: true
         shell: bash
         run: |
           set -euxo pipefail
@@ -124,15 +124,17 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## ✅ Application deployed"
+            echo "## ✅ Application deployed successfully"
             echo ""
             echo "Access your app at:"
             echo "- http://$IP:80"
-            echo "- http://$IP:5000 (ensure a service is listening)"
-            echo "- http://$IP:5001 (ensure a service is listening)"
+            echo "- http://$IP:5000 (ensure service is listening)"
+            echo "- http://$IP:5001 (ensure service is listening)"
+            echo ""
+            echo "🕓 The container will be stopped automatically in 4 minutes."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # (Optional) quick smoke test on port 80 – won’t fail the build if unreachable
+      # (Optional) quick smoke test on port 80
       - name: Smoke test port 80
         continue-on-error: true
         env:
@@ -141,3 +143,15 @@ jobs:
         run: |
           echo "Checking http://$IP:80 ..."
           curl -I --max-time 10 "http://$IP:80" || echo "⚠️ Port 80 not responding yet."
+
+      # ======== AUTO SHUTDOWN AFTER 4 MINUTES ========
+
+      - name: Wait 4 minutes then stop the app
+        shell: bash
+        run: |
+          echo "⏳ Waiting 4 minutes before stopping container..."
+          sleep 240
+          echo "🛑 Bringing down the container..."
+          docker stop php-app || true
+          docker rm -f php-app || true
+          echo "✅ Application stopped successfully after 4 minutes."
