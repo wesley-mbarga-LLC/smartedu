@@ -63,6 +63,14 @@ jobs:
 
       # ======== GCP Auth & Firewall/IP Steps ========
 
+      - name: Verify GCP_SA_KEY is present
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.GCP_SA_KEY }}" ]; then
+            echo "❌ GCP_SA_KEY is not available to this workflow. Ensure the repo/org secret exists and is shared with this repo." >&2
+            exit 1
+          fi
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -74,6 +82,7 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
 
       - name: Open firewall ports 80, 5000, 5001 (create or update)
+        continue-on-error: true   # don't fail entire job if IAM is not ready
         shell: bash
         run: |
           set -euxo pipefail
@@ -83,14 +92,16 @@ jobs:
               --project "$PROJECT_ID" \
               --allow=tcp:80,tcp:5000,tcp:5001 \
               --direction=INGRESS \
-              --source-ranges=0.0.0.0/0
+              --source-ranges=0.0.0.0/0 \
+            || echo "⚠️ Skipping firewall update (insufficient permissions)."
           else
             gcloud compute firewall-rules create "$RULE_NAME" \
               --project "$PROJECT_ID" \
               --allow=tcp:80,tcp:5000,tcp:5001 \
               --direction=INGRESS \
               --source-ranges=0.0.0.0/0 \
-              --network=default
+              --network=default \
+            || echo "⚠️ Skipping firewall create (insufficient permissions)."
           fi
 
       - name: Get VM public IP
@@ -100,6 +111,7 @@ jobs:
           IP=$(gcloud compute instances describe "$INSTANCE_NAME" \
                 --zone "$ZONE" --project "$PROJECT_ID" \
                 --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+          echo "Public IP: ${IP:-<none>}"
           if [[ -z "$IP" ]]; then
             echo "No external IP found for $INSTANCE_NAME. Please ensure the VM has one." >&2
             exit 1
@@ -112,10 +124,20 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## ✅ Application deployed successfully"
+            echo "## ✅ Application deployed"
             echo ""
             echo "Access your app at:"
             echo "- http://$IP:80"
-            echo "- http://$IP:5000 (ensure service is listening)"
-            echo "- http://$IP:5001 (ensure service is listening)"
+            echo "- http://$IP:5000 (ensure a service is listening)"
+            echo "- http://$IP:5001 (ensure a service is listening)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # (Optional) quick smoke test on port 80 – won’t fail the build if unreachable
+      - name: Smoke test port 80
+        continue-on-error: true
+        env:
+          IP: ${{ steps.ip.outputs.PUBLIC_IP }}
+        shell: bash
+        run: |
+          echo "Checking http://$IP:80 ..."
+          curl -I --max-time 10 "http://$IP:80" || echo "⚠️ Port 80 not responding yet."
