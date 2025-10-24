@@ -1,4 +1,4 @@
-name: Build and Deploy Docker Image (Organization Runners)
+name: Build and Deploy Docker Image (Organization Runner Group)
 
 on:
   push:
@@ -9,7 +9,8 @@ on:
 jobs:
   build-and-deploy:
     name: Build and Deploy with Org Runner Group
-    runs-on: [self-hosted, Wesley-group-runner]  # Option 1: only the org runner group
+    runs-on:
+      group: Wesley-group-runner  # ✅ uses only the org runner group (no labels)
 
     env:
       PROJECT_ID: tactile-visitor-469118-d8
@@ -21,8 +22,9 @@ jobs:
         shell: bash
         run: |
           echo "Runner name: ${{ runner.name }}"
-          echo "Runner labels: ${{ runner.labels }}"
-          echo "Runner OS/Arch: ${{ runner.os }} / ${{ runner.arch }}"
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Runner architecture: ${{ runner.arch }}"
+          echo "Job is running inside Wesley-group-runner"
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -99,7 +101,7 @@ jobs:
                 --zone "$ZONE" --project "$PROJECT_ID" \
                 --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
           if [[ -z "$IP" ]]; then
-            echo "No external IP on $INSTANCE_NAME. Add an external IP or use a LB/NAT." >&2
+            echo "No external IP found for $INSTANCE_NAME. Please ensure the VM has one." >&2
             exit 1
           fi
           echo "PUBLIC_IP=$IP" >> $GITHUB_OUTPUT
@@ -110,9 +112,10 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## Access your app on \`$IP\`"
+            echo "## ✅ Application deployed successfully"
             echo ""
+            echo "Access your app at:"
             echo "- http://$IP:80"
-            echo "- http://$IP:5000 (firewall open; ensure a service is listening)"
-            echo "- http://$IP:5001 (firewall open; ensure a service is listening)"
+            echo "- http://$IP:5000 (ensure service is listening)"
+            echo "- http://$IP:5001 (ensure service is listening)"
           } >> "$GITHUB_STEP_SUMMARY"
