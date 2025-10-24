@@ -4,12 +4,12 @@ on:
   push:
     branches:
       - master
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
-    name: Build and Deploy with Organization Runners
-    # Uses your org runner group + labels
-    runs-on: [self-hosted, Wesley-group-runner, build, deploy, test]
+    name: Build and Deploy with Org Runner Group
+    runs-on: [self-hosted, Wesley-group-runner]  # Option 1: only the org runner group
 
     env:
       PROJECT_ID: tactile-visitor-469118-d8
@@ -17,6 +17,13 @@ jobs:
       INSTANCE_NAME: wesley-vm
 
     steps:
+      - name: Show runner info
+        shell: bash
+        run: |
+          echo "Runner name: ${{ runner.name }}"
+          echo "Runner labels: ${{ runner.labels }}"
+          echo "Runner OS/Arch: ${{ runner.os }} / ${{ runner.arch }}"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -27,27 +34,30 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Set Docker image tag
+        shell: bash
         run: echo "IMAGE_TAG=${{ secrets.DOCKERHUB_USERNAME }}/my-php-app:${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Build Docker image
+        shell: bash
         run: |
           docker build \
-            -t $IMAGE_TAG \
-            -t ${{ secrets.DOCKERHUB_USERNAME }}/my-php-app:latest \
+            -t "$IMAGE_TAG" \
+            -t "${{ secrets.DOCKERHUB_USERNAME }}/my-php-app:latest" \
             -f smartedu/Dockerfile smartedu
 
       - name: Push Docker images
+        shell: bash
         run: |
-          docker push $IMAGE_TAG
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/my-php-app:latest
+          docker push "$IMAGE_TAG"
+          docker push "${{ secrets.DOCKERHUB_USERNAME }}/my-php-app:latest"
 
       - name: Stop and remove any existing container
-        run: |
-          docker rm -f php-app || true
+        shell: bash
+        run: docker rm -f php-app || true
 
       - name: Run Docker container on port 80
-        run: |
-          docker run -d -p 80:80 --name php-app ${{ secrets.DOCKERHUB_USERNAME }}/my-php-app:latest
+        shell: bash
+        run: docker run -d -p 80:80 --name php-app "${{ secrets.DOCKERHUB_USERNAME }}/my-php-app:latest"
 
       # ======== GCP Auth & Firewall/IP Steps ========
 
@@ -89,7 +99,7 @@ jobs:
                 --zone "$ZONE" --project "$PROJECT_ID" \
                 --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
           if [[ -z "$IP" ]]; then
-            echo "No external IP on $INSTANCE_NAME. Ensure the VM has an external IP or add a Cloud NAT/Load Balancer." >&2
+            echo "No external IP on $INSTANCE_NAME. Add an external IP or use a LB/NAT." >&2
             exit 1
           fi
           echo "PUBLIC_IP=$IP" >> $GITHUB_OUTPUT
@@ -97,11 +107,12 @@ jobs:
       - name: Publish access URLs to Job Summary
         env:
           IP: ${{ steps.ip.outputs.PUBLIC_IP }}
+        shell: bash
         run: |
           {
             echo "## Access your app on \`$IP\`"
             echo ""
             echo "- http://$IP:80"
-            echo "- http://$IP:5000 (open in firewall; ensure a service is listening)"
-            echo "- http://$IP:5001 (open in firewall; ensure a service is listening)"
+            echo "- http://$IP:5000 (firewall open; ensure a service is listening)"
+            echo "- http://$IP:5001 (firewall open; ensure a service is listening)"
           } >> "$GITHUB_STEP_SUMMARY"
